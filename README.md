@@ -1,19 +1,25 @@
 # iCloud Calendar MCP Server
 
-Lokalny serwer MCP do obsługi kalendarzy iCloud przez CalDAV. Działa przez stdio na Windows, macOS i Linux.
+A local MCP server for reading and managing iCloud calendars through CalDAV. It uses stdio and runs on Windows, macOS, and Linux.
 
-## Wymagania
+## Requirements
 
-- Python 3.12 lub nowszy.
-- Konto Apple z uwierzytelnianiem dwuskładnikowym.
-- Hasło aplikacji utworzone na [account.apple.com](https://account.apple.com/) w sekcji **Logowanie i zabezpieczenia → Hasła aplikacji**. Nie używaj głównego hasła konta.
+- Python 3.12 or newer.
+- An Apple Account with two-factor authentication enabled.
+- An app-specific password created at [account.apple.com](https://account.apple.com/) under **Sign-In and Security → App-Specific Passwords**. Do not use your main Apple Account password.
 
-## Instalacja
+## Installation
 
-1. Sklonuj repozytorium: `git clone https://github.com/ycangignacy/icloudmcpserver.git` i przejdź do katalogu `icloudmcpserver`.
-2. Utwórz środowisko i zainstaluj zależności:
+1. Clone the repository and enter its directory:
 
-   Windows (PowerShell):
+   ```sh
+   git clone https://github.com/ycangignacy/icloudmcpserver.git
+   cd icloudmcpserver
+   ```
+
+2. Create a virtual environment and install the dependencies:
+
+   **Windows (PowerShell)**
 
    ```powershell
    py -3.12 -m venv .venv
@@ -21,7 +27,7 @@ Lokalny serwer MCP do obsługi kalendarzy iCloud przez CalDAV. Działa przez std
    Copy-Item .env.example .env.local
    ```
 
-   macOS / Linux:
+   **macOS / Linux**
 
    ```sh
    python3 -m venv .venv
@@ -29,40 +35,42 @@ Lokalny serwer MCP do obsługi kalendarzy iCloud przez CalDAV. Działa przez std
    cp .env.example .env.local
    ```
 
-3. Wpisz swój adres konta Apple i hasło aplikacji do `.env.local`. `APPLE_CALDAV_URL` zwykle nie wymaga zmiany.
+3. Open `.env.local` and enter your Apple Account email address and app-specific password. The default `APPLE_CALDAV_URL` normally does not need to change.
 
-## Podłączenie do klienta MCP
+## Connect an MCP client
 
-Dodaj serwer typu stdio w konfiguracji klienta MCP. Ustaw pełną ścieżkę do Pythona w `.venv` jako polecenie oraz pełną ścieżkę do `server.py` jako argument. Przykład dla klienta używającego JSON:
+Add a stdio server to your MCP client's configuration. Set `command` to the absolute path of the Python executable inside `.venv`, and pass the absolute path of `server.py` as an argument. For a client that uses JSON:
 
 ```json
 {
   "mcpServers": {
     "icloud-calendar": {
-      "command": "/pełna/ścieżka/do/icloudmcpserver/.venv/bin/python",
-      "args": ["/pełna/ścieżka/do/icloudmcpserver/server.py"]
+      "command": "/absolute/path/to/icloudmcpserver/.venv/bin/python",
+      "args": ["/absolute/path/to/icloudmcpserver/server.py"]
     }
   }
 }
 ```
 
-Na Windows w `command` użyj `.venv\Scripts\python.exe`; ścieżki w JSON zapisz z podwójnymi ukośnikami odwrotnymi. Format konfiguracji zależy od klienta MCP. Serwer sam odczytuje `.env.local` z katalogu `server.py`, więc hasła nie trzeba wpisywać w konfiguracji klienta. Po podłączeniu wywołaj `list_calendars`, aby uzyskać ID kalendarzy.
+On Windows, use the absolute path to `.venv\Scripts\python.exe`. Escape backslashes in JSON paths. Configuration formats vary by MCP client. The server loads `.env.local` from the directory containing `server.py`, so the password does not need to appear in your client configuration. Call `list_calendars` after connecting to obtain calendar IDs.
 
-Skrypt `start.ps1` pozwala uruchomić serwer na Windows z katalogu projektu. Proces oczekuje na komunikaty MCP na standardowym wejściu; brak tekstowego menu jest prawidłowy.
+On Windows, you can also launch the server with `start.ps1` from the project directory. It waits for MCP messages on standard input; it does not display a text menu.
 
-## Narzędzia
+## Tools
 
-| Narzędzie | Działanie |
+| Tool | Purpose |
 | --- | --- |
-| `list_calendars` | Lista kalendarzy i ich identyfikatorów. |
-| `list_events` | Wystąpienia wydarzeń w przedziale dat; koniec przedziału jest wyłączny. |
-| `get_event` | Szczegóły wydarzenia i pełny ICS na podstawie UID. |
-| `create_event` | Utworzenie wydarzenia. |
-| `update_event` | Edycja głównego wydarzenia lub serii cyklicznej. |
-| `delete_event` | Usunięcie wydarzenia lub całej serii. |
+| `list_calendars` | List calendar names and IDs. |
+| `list_events` | List event occurrences in a date range; the end is exclusive. |
+| `get_event` | Get event details and its complete ICS by UID. |
+| `create_event` | Create an event. |
+| `update_event` | Update the master event or a recurring series. |
+| `delete_event` | Delete an event or an entire recurring series. |
 
-Daty całodniowe podawaj jako `YYYY-MM-DD`. Dla wydarzeń z godziną używaj ISO 8601 ze strefą, np. `2026-10-04T14:00:00+02:00`. Koniec wydarzenia całodniowego jest wyłączny: jednodniowe wydarzenie ma datę końca o dzień późniejszą niż data początku. Edycja serii cyklicznej zmienia jej główny komponent; istniejące wyjątki mogą zachować osobne godziny i opisy. Usunięcie po UID usuwa całą serię.
+Use `YYYY-MM-DD` for all-day events. Timed events require ISO 8601 with a UTC offset, for example `2026-10-04T14:00:00+02:00`. All-day end dates are exclusive: a one-day event ends on the following date. Updating a recurring series changes its master component; existing exceptions may retain their own times and descriptions. Deleting by UID removes the whole series.
 
-## Kopie i prywatność
+## Backups and privacy
 
-Serwer zapisuje pełny ICS przed edycją i usunięciem wydarzenia oraz po utworzeniu i edycji w `kopie zapasowe/wydarzenia`. Pliki ICS mogą zawierać prywatne szczegóły spotkań. `.env.local`, kopie zapasowe i `.venv` są ignorowane przez Git. Nie przesyłaj ich do repozytorium.
+The server saves complete ICS files before updates and deletions, and after creations and updates, in `kopie zapasowe/wydarzenia`. These files may contain private meeting details. `.env.local`, backups, and `.venv` are ignored by Git. Do not upload or share them.
+
+made by ycangignacy

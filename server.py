@@ -29,18 +29,18 @@ def _parse_time(value: str) -> date | datetime:
             return date.fromisoformat(value)
         result = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if result.tzinfo is None or result.utcoffset() is None:
-            raise ValueError("Godzina wymaga strefy czasowej, np. +02:00.")
+            raise ValueError("Timed events require a UTC offset, such as +02:00.")
         return result
     except ValueError as exc:
-        raise ValueError(f"Nieprawidłowa data/czas: {value}. Użyj YYYY-MM-DD albo ISO 8601 ze strefą.") from exc
+        raise ValueError(f"Invalid date/time: {value}. Use YYYY-MM-DD or ISO 8601 with a UTC offset.") from exc
 
 
 def _range(start: str, end: str) -> tuple[date | datetime, date | datetime]:
     first, last = _parse_time(start), _parse_time(end)
     if isinstance(first, datetime) != isinstance(last, datetime):
-        raise ValueError("Początek i koniec muszą być oba całodniowe albo oba z godziną.")
+        raise ValueError("Start and end must both be dates or both be timed values.")
     if first >= last:
-        raise ValueError("Koniec musi być później niż początek.")
+        raise ValueError("End must be later than start.")
     return first, last
 
 
@@ -49,10 +49,10 @@ def _client() -> Iterator[DAVClient]:
     username = os.getenv("APPLE_ID", "").strip()
     password = os.getenv("APPLE_APP_PASSWORD", "").strip()
     if not username or not password:
-        raise ValueError("Ustaw APPLE_ID i APPLE_APP_PASSWORD w .env.local.")
+        raise ValueError("Set APPLE_ID and APPLE_APP_PASSWORD in .env.local.")
     url = os.getenv("APPLE_CALDAV_URL", "https://caldav.icloud.com").strip()
     if not url.startswith("https://"):
-        raise ValueError("APPLE_CALDAV_URL musi używać HTTPS.")
+        raise ValueError("APPLE_CALDAV_URL must use HTTPS.")
     with DAVClient(url=url, username=username, password=password) as client:
         yield client
 
@@ -65,14 +65,14 @@ def _calendar(client: DAVClient, calendar_id: str) -> Any:
     for calendar in _calendars(client):
         if str(calendar.url) == calendar_id:
             return calendar
-    raise ValueError("Nie znaleziono kalendarza. Pobierz aktualne ID przez list_calendars.")
+    raise ValueError("Calendar not found. Call list_calendars to get a current ID.")
 
 
 def _component(event: Any) -> Any:
     components = [item for item in ICalendar.from_ical(event.data).walk() if item.name == "VEVENT"]
     master = next((item for item in components if "RECURRENCE-ID" not in item), None)
     if not components:
-        raise ValueError("Nie znaleziono wydarzenia VEVENT.")
+        raise ValueError("VEVENT component not found.")
     return master or components[0]
 
 
@@ -144,13 +144,13 @@ def create_event(calendar_id: str, title: str, start: str, end: str,
     """Create an event. Timed values need ISO 8601 offsets; dates create an all-day event."""
     first, last = _range(start, end)
     if not title.strip():
-        raise ValueError("Tytuł nie może być pusty.")
+        raise ValueError("Title cannot be empty.")
     with _client() as client:
         calendar = _calendar(client, calendar_id)
         event = calendar.add_event(dtstart=first, dtend=last, summary=title,
                                    description=description, location=location,
                                    uid=str(uuid4()))
-        backup = _backup(event, "po_utworzeniu")
+        backup = _backup(event, "after_create")
         return {**_event_info(event, calendar_id), "backup": backup}
 
 
@@ -161,7 +161,7 @@ def update_event(calendar_id: str, uid: str, title: str | None = None,
                  location: str | None = None) -> dict[str, Any]:
     """Update the master event (whole series for recurring events). Back up full ICS before and after."""
     if all(value is None for value in (title, start, end, description, location)):
-        raise ValueError("Podaj co najmniej jedno pole do zmiany.")
+        raise ValueError("Provide at least one field to update.")
     with _client() as client:
         event = _calendar(client, calendar_id).get_event_by_uid(uid)
         current = _component(event)
@@ -169,12 +169,12 @@ def update_event(calendar_id: str, uid: str, title: str | None = None,
         old_end = _as_iso(current.get("DTEND"))
         new_start, new_end = _range(start or old_start, end or old_end)
         if title is not None and not title.strip():
-            raise ValueError("Tytuł nie może być pusty.")
-        before = _backup(event, "przed_edycja")
+            raise ValueError("Title cannot be empty.")
+        before = _backup(event, "before_update")
         with event.edit_icalendar_instance() as instance:
             master = next((item for item in instance.walk() if item.name == "VEVENT" and "RECURRENCE-ID" not in item), None)
             if master is None:
-                raise ValueError("Nie znaleziono głównego wydarzenia VEVENT.")
+                raise ValueError("Main VEVENT component not found.")
             if title is not None:
                 master["SUMMARY"] = title
             if start is not None:
@@ -188,7 +188,7 @@ def update_event(calendar_id: str, uid: str, title: str | None = None,
             if location is not None:
                 master["LOCATION"] = location
         event.save()
-        after = _backup(event, "po_edycji")
+        after = _backup(event, "after_update")
         return {**_event_info(event, calendar_id), "backup_before": before,
                 "backup_after": after}
 
@@ -198,7 +198,7 @@ def delete_event(calendar_id: str, uid: str) -> dict[str, str]:
     """Delete an event or recurring series after saving its full ICS backup."""
     with _client() as client:
         event = _calendar(client, calendar_id).get_event_by_uid(uid)
-        backup = _backup(event, "przed_usunieciem")
+        backup = _backup(event, "before_delete")
         event.delete()
         return {"deleted_uid": uid, "calendar_id": calendar_id, "backup": backup}
 
