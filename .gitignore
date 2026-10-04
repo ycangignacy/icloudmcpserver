@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env*
+!.env.example
+kopie zapasowe/
+.codex/
+.media-temp/
+dashboard/
+dashboard.py
+start-dashboard.ps1
+AGENTS.md

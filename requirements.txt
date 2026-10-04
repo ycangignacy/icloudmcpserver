@@ -1,0 +1,4 @@
+mcp>=1.15,<2
+caldav>=3.3,<4
+icalendar>=6,<8
+python-dotenv>=1,<2
